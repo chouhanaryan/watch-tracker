@@ -19,6 +19,16 @@ two watchers, auto-detected when the site is first checked:
   It *also* watches the homepage text, so non-product updates (a "next drop:
   July 14" banner, a journal post teaser) are caught too.
 
+  **Unlisted-product safety net**: Shopify lets a merchant mark a product
+  "unlisted" — live at a direct URL and fully purchasable, but deliberately
+  excluded from `products.json`, the sitemap, and search. Drop brands use
+  this for links shared first via social/Discord, and catalog diffing alone
+  can't see it. Every check also scans the homepage HTML for `/products/<handle>`
+  links; any handle that isn't already in the catalog fires a 👀 **Possible
+  new listing** event so you can check it by hand. Once a flagged link
+  actually appears in the catalog, the normal 🚨 new-drop event takes over
+  and the link isn't re-flagged.
+
 - **HTML watcher** (fallback for non-Shopify sites) — extracts the visible text
   of the page (scripts/styles stripped, so rotating tokens don't cause false
   alarms), hashes it, and reports a readable added/removed-lines diff when it

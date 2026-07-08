@@ -61,6 +61,7 @@ KIND_META = {
     "product_change": {"label": "Product updated", "css": "change"},
     "product_removed": {"label": "Removed", "css": "removed"},
     "page_change": {"label": "Page updated", "css": "page"},
+    "unlisted_link": {"label": "Possible new listing", "css": "linked"},
 }
 templates.env.globals["kind_meta"] = lambda kind: KIND_META.get(
     kind, {"label": kind, "css": "change"}
