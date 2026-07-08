@@ -75,10 +75,39 @@ All via `.env` (see `.env.example`):
 | `DEFAULT_CHECK_INTERVAL_MINUTES` | `10` | interval for newly added sites |
 | `SCHEDULER_ENABLED` | `1` | set `0` to disable background checks |
 
-## Running it permanently
+## Deploy free with GitHub Actions + GitHub Pages
 
-The tracker only alerts while it's running, so it wants to live on something
-always-on: a Raspberry Pi, a $4 VPS, a home server. Example systemd unit:
+You don't need a server at all. The included workflow
+(`.github/workflows/tracker.yml`) runs the checker **every 30 minutes on
+GitHub Actions**, emails alerts, commits tracker state back to the repo
+(`state/watchtracker.db`), and publishes a read-only dashboard to
+**GitHub Pages** at `https://<user>.github.io/watch-tracker/`.
+
+Setup (once, after merging to `main`):
+
+1. **Settings → Pages → Source: "GitHub Actions"** (the workflow also tries to
+   enable this automatically). On a free plan the repo must be public for Pages.
+2. **Settings → Secrets and variables → Actions**, add:
+   `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM`,
+   `EMAIL_TO`. All optional — without them you still get the dashboard, just
+   no emails.
+3. Run the workflow once by hand (Actions → *Check sites and deploy dashboard*
+   → Run workflow) to record the baseline and publish the first dashboard.
+
+In this mode, sites are managed by editing **`sites.json`** and pushing — the
+web UI's add/pause/delete forms only exist in server mode. Every listed site
+is checked on every workflow run; adjust the `cron:` line to change cadence
+(GitHub may delay scheduled runs by a few minutes, and scheduled workflows
+only run from the repo's **default branch**).
+
+The same one-shot check also works from any machine's crontab:
+`python -m app.cron --output public`.
+
+## Running the full web app permanently
+
+The interactive dashboard (add sites, check now, manage recipients) is a
+server process, so it wants to live on something always-on: a Raspberry Pi,
+a $4 VPS, a home server. Example systemd unit:
 
 ```ini
 # /etc/systemd/system/watch-tracker.service
@@ -125,6 +154,7 @@ dispatch and error handling.
 ```
 app/
   main.py         FastAPI app, routes, seeding
+  cron.py         one-shot mode for GitHub Actions: check all sites + build static dashboard
   checker.py      one check run: fetch → diff → events → email
   scheduler.py    background sweep for due sites (every 60s)
   notifier.py     SMTP email building/sending
