@@ -10,24 +10,33 @@
 <body>
   <header class="topbar">
     <span class="brand">⌚ Watch Tracker</span>
-    <span class="smtp-warning">updated {{ generated_at }} · read-only dashboard, checks run via GitHub Actions</span>
+    <span class="smtp-warning">updated {{ generated_at }} · checks run via GitHub Actions</span>
   </header>
   <main class="container">
     <div class="grid">
       <section class="panel">
-        <h2>Tracked sites</h2>
+        <h2>Tracked brands</h2>
         <ul class="site-list">
-          {% for site in sites %}
+          {% for entry in site_entries %}
+          {% set site = entry.site %}
           <li class="site-row {% if not site.enabled %}disabled{% endif %}">
             <div class="site-main">
-              <span class="site-name">{{ site.name }}</span>
+              <a class="site-name" href="site-{{ site.id }}.html">{{ site.name }} →</a>
               <a class="site-url" href="{{ site.url }}" target="_blank" rel="noopener">{{ site.url }}</a>
               <div class="site-meta">
                 <span class="tag">{{ site.watcher_type }}</span>
+                {% if entry.products %}
+                  <span>{{ entry.products|length }} product{{ 's' if entry.products|length != 1 }}</span>
+                  {% if entry.counts.in_stock %}<span class="status-ok">{{ entry.counts.in_stock }} available</span>{% endif %}
+                  {% if entry.counts.upcoming %}<span class="status-upcoming">{{ entry.counts.upcoming }} coming soon</span>{% endif %}
+                  {% if entry.counts.sold_out %}<span>{{ entry.counts.sold_out }} sold out</span>{% endif %}
+                {% elif site.watcher_type == 'shopify' %}
+                  <span>no products listed right now</span>
+                {% endif %}
                 {% if site.last_checked_at %}
                   <span>last check {{ site.last_checked_at }} UTC</span>
                   {% if site.last_status and site.last_status != 'ok' %}
-                    <span class="status-err" title="{{ site.last_status }}">⚠ {{ site.last_status }}</span>
+                    <span class="status-err" title="{{ site.last_status }}">⚠ error</span>
                   {% else %}
                     <span class="status-ok">✓</span>
                   {% endif %}
@@ -39,37 +48,16 @@
           </li>
           {% endfor %}
         </ul>
-        <p class="muted small">To track another brand, add it to <code>sites.json</code> in the repo.</p>
-
-        {% for site in sites %}
-        {% set products = products_by_site[site.id] %}
-        {% if products %}
-        <h3>{{ site.name }} — products ({{ products|length }})</h3>
-        <ul class="product-list">
-          {% for p in products %}
-          <li class="product">
-            {% if p.image_url %}<img src="{{ p.image_url }}" alt="" loading="lazy">{% endif %}
-            <div>
-              <a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.title }}</a>
-              <div class="muted small">
-                {{ p.price or '—' }} ·
-                {% if p.available %}<span class="status-ok">in stock</span>
-                {% else %}sold out{% endif %}
-                · first seen {{ p.first_seen_at }} UTC
-              </div>
-            </div>
-          </li>
-          {% endfor %}
-        </ul>
-        {% endif %}
-        {% endfor %}
+        <p class="muted small">Click a brand for per-product status. To track another brand,
+          add it to <code>sites.json</code> in the repo.</p>
       </section>
 
       <section class="panel">
         <h2>Latest updates</h2>
         {% if not events %}
-          <p class="muted">Nothing yet. The first check of each site records a baseline;
-          changes after that show up here.</p>
+          <p class="muted">No changes detected yet — the tracker alerts on what changes
+          <em>after</em> it started watching. Some brands (Kurono included) list no products
+          between drops; the moment something appears, it shows up here and triggers an email.</p>
         {% endif %}
         <ul class="event-list">
           {% for e in events %}

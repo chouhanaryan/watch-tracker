@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ site.name }} — Watch Tracker</title>
+  <link rel="stylesheet" href="static/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⌚</text></svg>">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">⌚ Watch Tracker</a>
+    <span class="smtp-warning">updated {{ generated_at }}</span>
+  </header>
+  <main class="container">
+    <p><a href="index.html">← All brands</a></p>
+    <div class="site-header">
+      <h1>{{ site.name }}</h1>
+      <a href="{{ site.url }}" target="_blank" rel="noopener">{{ site.url }}</a>
+      <div class="site-meta">
+        <span class="tag">{{ site.watcher_type }}</span>
+        <span>{{ 'active' if site.enabled else 'paused' }}</span>
+        {% if site.last_checked_at %}
+          <span>last check {{ site.last_checked_at }} UTC</span>
+          {% if site.last_status and site.last_status != 'ok' %}
+            <span class="status-err">{{ site.last_status }}</span>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Products <span class="muted small">({{ products|length }})</span></h2>
+        {% if not products %}
+          <p class="muted">
+            {% if site.watcher_type == 'shopify' %}
+              No products in the store right now. Drop-based brands like Kurono
+              unlist their catalog between releases — when the next drop is
+              published, every product appears here with its status, and a
+              🚨 new-drop alert goes out.
+            {% else %}
+              This site isn't a Shopify store, so it's watched for visible page
+              changes instead of individual products.
+            {% endif %}
+          </p>
+        {% endif %}
+        <ul class="product-list">
+          {% for p in products %}
+          {% set st = product_status(p) %}
+          <li class="product">
+            {% if p.image_url %}<img src="{{ p.image_url }}" alt="" loading="lazy">{% endif %}
+            <div>
+              <a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.title }}</a>
+              <span class="badge {{ st.css }}">{{ st.label }}</span>
+              <div class="muted small">
+                {{ p.price or 'price unknown' }}
+                · first seen {{ p.first_seen_at }} UTC
+                · last seen {{ p.last_seen_at }} UTC
+              </div>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section class="panel">
+        <h2>Updates</h2>
+        {% if not events %}<p class="muted">No changes recorded yet for this brand.</p>{% endif %}
+        <ul class="event-list">
+          {% for e in events %}
+          {% set meta = kind_meta(e.kind) %}
+          <li class="event {{ meta.css }}">
+            <div class="event-head">
+              <span class="badge {{ meta.css }}">{{ meta.label }}</span>
+              <span class="event-time">{{ e.detected_at }} UTC</span>
+              {% if e.notified %}<span class="event-mail" title="Emailed">✉</span>{% endif %}
+            </div>
+            <div class="event-title">
+              {% if e.url %}<a href="{{ e.url }}" target="_blank" rel="noopener">{{ e.title }}</a>
+              {% else %}{{ e.title }}{% endif %}
+            </div>
+            {% if e.details %}<pre class="event-details">{{ e.details }}</pre>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+    </div>
+  </main>
+  <footer class="footer">Generated {{ generated_at }} by Watch Tracker.</footer>
+</body>
+</html>

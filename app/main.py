@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import checker, config, db, scheduler
+from .status import product_status
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("watchtracker")
@@ -65,6 +66,7 @@ templates.env.globals["kind_meta"] = lambda kind: KIND_META.get(
     kind, {"label": kind, "css": "change"}
 )
 templates.env.globals["smtp_configured"] = config.smtp_configured
+templates.env.globals["product_status"] = product_status
 
 
 def _validate_url(url: str) -> str:
