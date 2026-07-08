@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="grid">
+  <section class="panel">
+    <h2>Tracked sites</h2>
+    {% if not sites %}<p class="muted">No sites yet — add one below.</p>{% endif %}
+    <ul class="site-list">
+      {% for site in sites %}
+      <li class="site-row {% if not site.enabled %}disabled{% endif %}">
+        <div class="site-main">
+          <a class="site-name" href="/sites/{{ site.id }}">{{ site.name }}</a>
+          <a class="site-url" href="{{ site.url }}" target="_blank" rel="noopener">{{ site.url }}</a>
+          <div class="site-meta">
+            <span class="tag">{{ site.watcher_type }}</span>
+            <span>every {{ site.check_interval_minutes }} min</span>
+            {% if site.last_checked_at %}
+              <span>last check {{ site.last_checked_at }} UTC</span>
+              {% if site.last_status and site.last_status != 'ok' %}
+                <span class="status-err" title="{{ site.last_status }}">⚠ error</span>
+              {% else %}
+                <span class="status-ok">✓</span>
+              {% endif %}
+            {% else %}
+              <span>never checked</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="site-actions">
+          <form method="post" action="/sites/{{ site.id }}/check"><button title="Check now">Check</button></form>
+          <form method="post" action="/sites/{{ site.id }}/toggle">
+            <button class="ghost">{{ 'Pause' if site.enabled else 'Resume' }}</button>
+          </form>
+          <form method="post" action="/sites/{{ site.id }}/delete"
+                onsubmit="return confirm('Stop tracking {{ site.name }}? History will be deleted.')">
+            <button class="danger ghost">✕</button>
+          </form>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+
+    <h3>Add a site</h3>
+    <form class="add-form" method="post" action="/sites">
+      <input name="name" placeholder="Brand name (e.g. Kurono Tokyo)" required>
+      <input name="url" type="url" placeholder="https://example.com" required>
+      <label>Check every
+        <input name="interval" type="number" value="10" min="1" style="width:4.5em"> min
+      </label>
+      <button type="submit">Track</button>
+    </form>
+    <p class="muted small">Shopify stores are detected automatically and get product-level
+      drop/restock alerts. Everything else is watched for visible page changes.</p>
+
+    <h3>Email recipients</h3>
+    <ul class="recipient-list">
+      {% for r in recipients %}
+      <li>
+        {{ r.email }}
+        <form method="post" action="/recipients/{{ r.id }}/delete"><button class="danger ghost">✕</button></form>
+      </li>
+      {% else %}
+      <li class="muted">No recipients — alerts appear here but won't be emailed.</li>
+      {% endfor %}
+    </ul>
+    <form class="add-form" method="post" action="/recipients">
+      <input name="email" type="email" placeholder="you@example.com" required>
+      <button type="submit">Add</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Latest updates</h2>
+    {% if not events %}
+      <p class="muted">Nothing yet. The first check of each site just records a baseline;
+      changes after that show up here.</p>
+    {% endif %}
+    <ul class="event-list">
+      {% for e in events %}
+      {% set meta = kind_meta(e.kind) %}
+      <li class="event {{ meta.css }}">
+        <div class="event-head">
+          <span class="badge {{ meta.css }}">{{ meta.label }}</span>
+          <span class="event-site">{{ e.site_name }}</span>
+          <span class="event-time">{{ e.detected_at }} UTC</span>
+          {% if e.notified %}<span class="event-mail" title="Emailed">✉</span>{% endif %}
+        </div>
+        <div class="event-title">
+          {% if e.url %}<a href="{{ e.url }}" target="_blank" rel="noopener">{{ e.title }}</a>
+          {% else %}{{ e.title }}{% endif %}
+        </div>
+        {% if e.details %}<pre class="event-details">{{ e.details }}</pre>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}
