@@ -18,6 +18,7 @@ KIND_LABELS = {
     "product_change": "Product updated",
     "product_removed": "Product removed",
     "page_change": "Page updated",
+    "unlisted_link": "Possible new listing",
 }
 
 
@@ -27,6 +28,9 @@ def build_subject(site_name: str, events: list[dict]) -> str:
         if len(drops) == 1:
             return f"\U0001f6a8 NEW DROP at {site_name}: {drops[0]['title'].removeprefix('New product: ')}"
         return f"\U0001f6a8 NEW DROP at {site_name}: {len(drops)} new products"
+    links = [e for e in events if e["kind"] == "unlisted_link"]
+    if links:
+        return f"\U0001f440 Possible new listing at {site_name} — not yet in the catalog"
     return f"⏰ {site_name} updated ({len(events)} change{'s' if len(events) != 1 else ''})"
 
 
@@ -34,7 +38,10 @@ def build_html_body(site_name: str, events: list[dict]) -> str:
     rows = []
     for e in events:
         label = KIND_LABELS.get(e["kind"], e["kind"])
-        color = "#d0342c" if e["kind"] == "new_drop" else "#2c6e49" if e["kind"] == "restock" else "#555"
+        color = ("#d0342c" if e["kind"] == "new_drop"
+                 else "#2c6e49" if e["kind"] == "restock"
+                 else "#8a63d2" if e["kind"] == "unlisted_link"
+                 else "#555")
         details = html.escape(e.get("details") or "").replace("\n", "<br>")
         link = (
             f'<a href="{html.escape(e["url"], quote=True)}">View →</a>'

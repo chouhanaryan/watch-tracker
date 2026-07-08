@@ -9,8 +9,6 @@ from .watchers import html_watcher, shopify
 
 log = logging.getLogger(__name__)
 
-BASELINE_KINDS_SUPPRESSED = "baseline"
-
 
 def make_client() -> httpx.Client:
     return httpx.Client(
@@ -41,9 +39,12 @@ def check_site(conn, site, client: httpx.Client | None = None) -> list[dict]:
             db.set_site_watcher_type(conn, site["id"], watcher_type)
             log.info("Site %s detected as %s", site["url"], watcher_type)
 
+        homepage = client.get(site["url"])
+        homepage.raise_for_status()
+
         if watcher_type == "shopify":
-            events += _check_shopify(conn, site, client)
-        events += _check_page(conn, site, client)
+            events += _check_shopify(conn, site, client, homepage.text)
+        events += _check_page(conn, site, homepage.text)
 
         db.update_site_status(conn, site["id"], "ok")
         conn.commit()
@@ -61,7 +62,7 @@ def check_site(conn, site, client: httpx.Client | None = None) -> list[dict]:
     return events
 
 
-def _check_shopify(conn, site, client) -> list[dict]:
+def _check_shopify(conn, site, client, homepage_html: str) -> list[dict]:
     current = shopify.fetch_products(client, site["url"])
     stored = db.products_for_site(conn, site["id"], include_removed=True)
     previous = {row["external_id"]: dict(row) for row in stored}
@@ -87,13 +88,48 @@ def _check_shopify(conn, site, client) -> list[dict]:
     if first_run:
         db.set_products_baselined(conn, site["id"])
         log.info("Baseline: stored %d products for %s", len(current), site["url"])
+
+    known_handles = {p.get("handle") for p in current if p.get("handle")}
+    known_handles |= {row["handle"] for row in stored if row["handle"]}
+    persisted += _check_unlisted_links(conn, site, homepage_html, known_handles)
     return persisted
 
 
-def _check_page(conn, site, client) -> list[dict]:
-    resp = client.get(site["url"])
-    resp.raise_for_status()
-    text = html_watcher.extract_text(resp.text)
+def _check_unlisted_links(conn, site, homepage_html: str, known_handles: set) -> list[dict]:
+    """Flag product links on the homepage that aren't in the catalog.
+
+    Shopify lets a merchant mark a product "unlisted": live at a direct URL
+    and fully purchasable, but deliberately excluded from products.json, the
+    sitemap, and search — the mechanism drop brands use for links shared
+    first via social/Discord. Catalog diffing alone can't see those; this
+    catches them the moment the brand links one from the page we already
+    fetch every check.
+    """
+    links = html_watcher.extract_product_links(homepage_html, site["url"])
+    already_flagged = db.known_link_handles(conn, site["id"])
+    known = known_handles | already_flagged
+
+    persisted = []
+    for handle, url in links.items():
+        if handle in known:
+            continue
+        db.add_discovered_link(conn, site["id"], handle, url)
+        label = handle.replace("-", " ").replace("_", " ").title()
+        ev = {
+            "kind": "unlisted_link",
+            "title": f"New product link found on site: {label}",
+            "details": ("Linked on the page but not in the product catalog — "
+                        "may be an early or unlisted drop. Worth checking by hand."),
+            "url": url,
+        }
+        ev["_id"] = db.add_event(conn, site["id"], ev["kind"], ev["title"],
+                                 ev["details"], ev["url"])
+        persisted.append(ev)
+    return persisted
+
+
+def _check_page(conn, site, homepage_html: str) -> list[dict]:
+    text = html_watcher.extract_text(homepage_html)
     new_hash = html_watcher.content_hash(text)
 
     snapshot = db.get_snapshot(conn, site["id"])

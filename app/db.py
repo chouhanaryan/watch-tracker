@@ -62,6 +62,14 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_site ON events(site_id, detected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_detected ON events(detected_at DESC);
 
+CREATE TABLE IF NOT EXISTS discovered_links (
+    site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    handle TEXT NOT NULL,
+    url TEXT,
+    first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (site_id, handle)
+);
+
 CREATE TABLE IF NOT EXISTS recipients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL UNIQUE,
@@ -260,6 +268,22 @@ def recent_events(conn, limit: int = 50, site_id: int | None = None):
 def mark_events_notified(conn, event_ids: list[int]) -> None:
     conn.executemany("UPDATE events SET notified = 1 WHERE id = ?",
                      [(i,) for i in event_ids])
+
+
+# --- discovered links (unlisted-product safety net) ---
+
+def known_link_handles(conn, site_id: int) -> set:
+    rows = conn.execute(
+        "SELECT handle FROM discovered_links WHERE site_id = ?", (site_id,)
+    ).fetchall()
+    return {r["handle"] for r in rows}
+
+
+def add_discovered_link(conn, site_id: int, handle: str, url: str) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO discovered_links (site_id, handle, url) VALUES (?, ?, ?)",
+        (site_id, handle, url),
+    )
 
 
 # --- recipients ---

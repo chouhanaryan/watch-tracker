@@ -8,6 +8,7 @@ only human-visible text changes count.
 import difflib
 import hashlib
 import re
+from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
@@ -28,6 +29,29 @@ def extract_text(html: str) -> str:
 
 def content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def extract_product_links(html: str, base_url: str) -> dict[str, str]:
+    """Map product handle -> canonical URL for every /products/<handle> link
+    on the page. Restricted to real <a href> anchors (not raw text/scripts)
+    so embedded JSON blobs and trackers don't produce false positives.
+
+    Only sees what's in the static HTML response — links injected by
+    client-side JS after page load won't appear here.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    links: dict[str, str] = {}
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if "/products/" not in href:
+            continue
+        absolute = urljoin(base_url, href)
+        path = urlparse(absolute).path
+        idx = path.find("/products/")
+        handle = path[idx + len("/products/"):].split("/")[0].strip()
+        if handle and handle not in links:
+            links[handle] = absolute.split("?")[0].split("#")[0]
+    return links
 
 
 def summarize_diff(old_text: str, new_text: str) -> str:

@@ -31,6 +31,7 @@ KIND_META = {
     "product_change": {"label": "Product updated", "css": "change"},
     "product_removed": {"label": "Removed", "css": "removed"},
     "page_change": {"label": "Page updated", "css": "page"},
+    "unlisted_link": {"label": "Possible new listing", "css": "linked"},
 }
 
 
