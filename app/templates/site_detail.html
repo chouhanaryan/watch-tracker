@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ site.name }} — Watch Tracker{% endblock %}
+{% block content %}
+
+<p><a href="/">← All sites</a></p>
+<div class="site-header">
+  <h1>{{ site.name }}</h1>
+  <a href="{{ site.url }}" target="_blank" rel="noopener">{{ site.url }}</a>
+  <div class="site-meta">
+    <span class="tag">{{ site.watcher_type }}</span>
+    <span>every {{ site.check_interval_minutes }} min</span>
+    <span>{{ 'active' if site.enabled else 'paused' }}</span>
+    {% if site.last_checked_at %}
+      <span>last check {{ site.last_checked_at }} UTC</span>
+      {% if site.last_status and site.last_status != 'ok' %}
+        <span class="status-err">{{ site.last_status }}</span>
+      {% endif %}
+    {% endif %}
+  </div>
+  <form method="post" action="/sites/{{ site.id }}/check"><button>Check now</button></form>
+</div>
+
+<div class="grid">
+  <section class="panel">
+    <h2>Updates</h2>
+    {% if not events %}<p class="muted">No updates recorded yet.</p>{% endif %}
+    <ul class="event-list">
+      {% for e in events %}
+      {% set meta = kind_meta(e.kind) %}
+      <li class="event {{ meta.css }}">
+        <div class="event-head">
+          <span class="badge {{ meta.css }}">{{ meta.label }}</span>
+          <span class="event-time">{{ e.detected_at }} UTC</span>
+          {% if e.notified %}<span class="event-mail" title="Emailed">✉</span>{% endif %}
+        </div>
+        <div class="event-title">
+          {% if e.url %}<a href="{{ e.url }}" target="_blank" rel="noopener">{{ e.title }}</a>
+          {% else %}{{ e.title }}{% endif %}
+        </div>
+        {% if e.details %}<pre class="event-details">{{ e.details }}</pre>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="panel">
+    <h2>Known products <span class="muted small">({{ products|length }})</span></h2>
+    {% if not products %}
+      <p class="muted">No products tracked{% if site.watcher_type == 'html' %} — this site
+      isn't a Shopify store, so it's watched for page changes instead{% endif %}.</p>
+    {% endif %}
+    <ul class="product-list">
+      {% for p in products %}
+      <li class="product">
+        {% if p.image_url %}<img src="{{ p.image_url }}" alt="" loading="lazy">{% endif %}
+        <div>
+          <a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.title }}</a>
+          <div class="muted small">
+            {{ p.price or '—' }} ·
+            {% if p.available %}<span class="status-ok">in stock</span>
+            {% else %}sold out{% endif %}
+            · first seen {{ p.first_seen_at }} UTC
+          </div>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}
