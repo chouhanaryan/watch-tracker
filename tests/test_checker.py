@@ -113,6 +113,48 @@ def test_non_shopify_site_falls_back_to_html_watch(conn):
     assert "New model announced!" in events[0]["details"]
 
 
+def test_drop_after_empty_catalog_still_alerts(conn):
+    """Kurono-style: catalog is empty between drops. The empty first check is
+    the baseline; products appearing later must fire new_drop, not be
+    swallowed as another baseline."""
+    store = FakeStore([])
+    site = add_test_site(conn)
+    assert checker.check_site(conn, site, client=store.client()) == []
+    assert db.get_site(conn, site["id"])["products_baselined"] == 1
+
+    # second empty check: still no events, still baselined
+    site = db.get_site(conn, site["id"])
+    assert checker.check_site(conn, site, client=store.client()) == []
+
+    store.products.append(shopify_product(1, "Calendrier Type 3", available=False))
+    site = db.get_site(conn, site["id"])
+    events = checker.check_site(conn, site, client=store.client())
+    assert [e["kind"] for e in events] == ["new_drop"]
+    assert "Calendrier Type 3" in events[0]["title"]
+
+
+def test_ever_available_tracks_status_lifecycle(conn):
+    from app.status import product_status
+
+    store = FakeStore([shopify_product(1, "Toki", available=False)])
+    site = add_test_site(conn)
+    checker.check_site(conn, site, client=store.client())
+    p = db.products_for_site(conn, site["id"])[0]
+    assert product_status(p)["code"] == "upcoming"  # listed, never purchasable
+
+    store.products = [shopify_product(1, "Toki", available=True)]
+    site = db.get_site(conn, site["id"])
+    checker.check_site(conn, site, client=store.client())
+    p = db.products_for_site(conn, site["id"])[0]
+    assert product_status(p)["code"] == "in_stock"
+
+    store.products = [shopify_product(1, "Toki", available=False)]
+    site = db.get_site(conn, site["id"])
+    checker.check_site(conn, site, client=store.client())
+    p = db.products_for_site(conn, site["id"])[0]
+    assert product_status(p)["code"] == "sold_out"  # was purchasable once
+
+
 def test_fetch_error_recorded_not_raised(conn):
     transport = httpx.MockTransport(lambda req: httpx.Response(500))
     site = add_test_site(conn, url="https://down.example")

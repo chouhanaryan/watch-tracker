@@ -46,20 +46,29 @@
   <section class="panel">
     <h2>Known products <span class="muted small">({{ products|length }})</span></h2>
     {% if not products %}
-      <p class="muted">No products tracked{% if site.watcher_type == 'html' %} — this site
-      isn't a Shopify store, so it's watched for page changes instead{% endif %}.</p>
+      <p class="muted">
+        {% if site.watcher_type == 'html' %}
+          This site isn't a Shopify store, so it's watched for visible page
+          changes instead of individual products.
+        {% else %}
+          No products in the store right now — drop-based brands unlist their
+          catalog between releases. New products appear here (and alert you)
+          the moment they're published.
+        {% endif %}
+      </p>
     {% endif %}
     <ul class="product-list">
       {% for p in products %}
+      {% set st = product_status(p) %}
       <li class="product">
         {% if p.image_url %}<img src="{{ p.image_url }}" alt="" loading="lazy">{% endif %}
         <div>
           <a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.title }}</a>
+          <span class="badge {{ st.css }}">{{ st.label }}</span>
           <div class="muted small">
-            {{ p.price or '—' }} ·
-            {% if p.available %}<span class="status-ok">in stock</span>
-            {% else %}sold out{% endif %}
+            {{ p.price or 'price unknown' }}
             · first seen {{ p.first_seen_at }} UTC
+            · last seen {{ p.last_seen_at }} UTC
           </div>
         </div>
       </li>

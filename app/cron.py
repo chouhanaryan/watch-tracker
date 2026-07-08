@@ -17,7 +17,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from . import checker, config, db
+from . import checker, config, db, status
 
 log = logging.getLogger("watchtracker.cron")
 
@@ -73,19 +73,39 @@ def render_static(conn, out_dir: Path) -> None:
     env.globals["kind_meta"] = lambda kind: KIND_META.get(
         kind, {"label": kind, "css": "change"}
     )
-    sites = db.list_sites(conn)
-    html = env.get_template("static_index.html").render(
-        sites=sites,
-        events=db.recent_events(conn, limit=100),
-        products_by_site={s["id"]: db.products_for_site(conn, s["id"]) for s in sites},
-        generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-    )
+    env.globals["product_status"] = status.product_status
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "index.html").write_text(html)
+
+    site_entries = []
+    for site in db.list_sites(conn):
+        products = db.products_for_site(conn, site["id"])
+        counts = {"in_stock": 0, "sold_out": 0, "upcoming": 0}
+        for p in products:
+            counts[status.product_status(p)["code"]] += 1
+        site_entries.append({"site": site, "products": products, "counts": counts})
+
+        page = env.get_template("static_site.html").render(
+            site=site,
+            products=products,
+            counts=counts,
+            events=db.recent_events(conn, limit=100, site_id=site["id"]),
+            generated_at=generated_at,
+        )
+        (out_dir / f"site-{site['id']}.html").write_text(page)
+
+    index = env.get_template("static_index.html").render(
+        site_entries=site_entries,
+        events=db.recent_events(conn, limit=100),
+        generated_at=generated_at,
+    )
+    (out_dir / "index.html").write_text(index)
+
     static_out = out_dir / "static"
     static_out.mkdir(exist_ok=True)
     shutil.copy(APP_DIR / "static" / "style.css", static_out / "style.css")
-    log.info("Static dashboard written to %s", out_dir / "index.html")
+    log.info("Static dashboard written to %s (%d site pages)",
+             out_dir / "index.html", len(site_entries))
 
 
 def main(argv: list[str] | None = None) -> int:

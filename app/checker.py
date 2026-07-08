@@ -66,7 +66,10 @@ def _check_shopify(conn, site, client) -> list[dict]:
     stored = db.products_for_site(conn, site["id"], include_removed=True)
     previous = {row["external_id"]: dict(row) for row in stored}
 
-    first_run = len(stored) == 0
+    # An explicit flag, not "no products stored yet": brands like Kurono
+    # empty their catalog between drops, and treating every empty-catalog
+    # check as a fresh baseline would swallow the next drop's events.
+    first_run = not site["products_baselined"]
     events = [] if first_run else shopify.diff_products(previous, current)
 
     for p in current:
@@ -82,6 +85,7 @@ def _check_shopify(conn, site, client) -> list[dict]:
                                  ev["details"], ev["url"])
         persisted.append(ev)
     if first_run:
+        db.set_products_baselined(conn, site["id"])
         log.info("Baseline: stored %d products for %s", len(current), site["url"])
     return persisted
 

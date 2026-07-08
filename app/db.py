@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS sites (
     enabled INTEGER NOT NULL DEFAULT 1,
     last_checked_at TEXT,
     last_status TEXT,
+    products_baselined INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -32,6 +33,7 @@ CREATE TABLE IF NOT EXISTS products (
     price TEXT,
     currency TEXT,
     available INTEGER,
+    ever_available INTEGER NOT NULL DEFAULT 0,
     image_url TEXT,
     first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -78,9 +80,29 @@ def connect(db_path: str | None = None) -> sqlite3.Connection:
     return conn
 
 
+def _ensure_column(conn, table: str, column: str, ddl: str) -> None:
+    cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+
+
 def init_db(db_path: str | None = None) -> None:
     with connect(db_path) as conn:
         conn.executescript(SCHEMA)
+        # Migrations for databases created before these columns existed.
+        _ensure_column(conn, "sites", "products_baselined",
+                       "products_baselined INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, "products", "ever_available",
+                       "ever_available INTEGER NOT NULL DEFAULT 0")
+        # Backfill: sites that already have stored products were baselined
+        # under the old products-exist heuristic; anything ever seen in
+        # stock has, by definition, been available.
+        conn.execute(
+            "UPDATE sites SET products_baselined = 1 "
+            "WHERE products_baselined = 0 "
+            "AND id IN (SELECT DISTINCT site_id FROM products)"
+        )
+        conn.execute("UPDATE products SET ever_available = 1 WHERE available = 1")
 
 
 # --- sites ---
@@ -112,6 +134,10 @@ def update_site_status(conn, site_id: int, status: str) -> None:
 
 def set_site_watcher_type(conn, site_id: int, watcher_type: str) -> None:
     conn.execute("UPDATE sites SET watcher_type = ? WHERE id = ?", (watcher_type, site_id))
+
+
+def set_products_baselined(conn, site_id: int) -> None:
+    conn.execute("UPDATE sites SET products_baselined = 1 WHERE id = ?", (site_id,))
 
 
 def set_site_enabled(conn, site_id: int, enabled: bool) -> None:
@@ -148,8 +174,8 @@ def upsert_product(conn, site_id: int, p: dict) -> None:
     conn.execute(
         """
         INSERT INTO products (site_id, external_id, handle, title, url, price, currency,
-                              available, image_url)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              available, ever_available, image_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (site_id, external_id) DO UPDATE SET
             handle = excluded.handle,
             title = excluded.title,
@@ -157,13 +183,15 @@ def upsert_product(conn, site_id: int, p: dict) -> None:
             price = excluded.price,
             currency = excluded.currency,
             available = excluded.available,
+            ever_available = CASE WHEN excluded.available = 1 THEN 1
+                                  ELSE products.ever_available END,
             image_url = excluded.image_url,
             last_seen_at = datetime('now'),
             removed = 0
         """,
         (site_id, p["external_id"], p.get("handle"), p.get("title"), p.get("url"),
          p.get("price"), p.get("currency"), 1 if p.get("available") else 0,
-         p.get("image_url")),
+         1 if p.get("available") else 0, p.get("image_url")),
     )
 
 
